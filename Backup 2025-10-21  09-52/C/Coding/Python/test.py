@@ -1,0 +1,1 @@
+print("the pen is black")

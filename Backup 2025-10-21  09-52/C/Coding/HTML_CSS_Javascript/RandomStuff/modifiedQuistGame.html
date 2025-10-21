@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Casino</title>
+  <style>
+    body { font-family: sans-serif; background: #222; color: #eee; padding: 20px; }
+    button { margin: 5px; padding: 10px; }
+    #game-output { white-space: pre-line; margin-bottom: 20px; }
+  </style>
+</head>
+<body>
+  <h1>Casino</h1>
+  <div id="game-output"></div>
+  <div id="controls"></div>
+
+  <script>
+    const output = document.getElementById("game-output");
+    const controls = document.getElementById("controls");
+
+    // ----- Local Storage Utilities -----
+    function loadState() {
+      return {
+        bankroll: parseInt(localStorage.getItem("bankroll")) || 100,
+        debt: parseInt(localStorage.getItem("debt")) || 0
+      };
+    }
+
+    function saveState() {
+      localStorage.setItem("bankroll", bankroll);
+      localStorage.setItem("debt", debt);
+    }
+
+    function resetState() {
+      bankroll = 100;
+      debt = 0;
+      saveState();
+      showMainMenu();
+    }
+
+    // ----- Casino Menu -----
+    function showMainMenu() {
+      output.innerText = `--- Casino Lobby ---\nBankroll: ${bankroll}\nDebt: ${debt}\n`;
+      controls.innerHTML = `
+        <button onclick="startRound()">Play Blackjack</button>
+        <button onclick="payDebt()">Pay Debt</button>
+        <button onclick="resetState()">Reset Game</button>
+      `;
+    }
+
+    function payDebt() {
+      if (debt <= 0) {
+        output.innerText = "You have no debt to pay.\n";
+        showMainMenu();
+        return;
+      }
+      const amount = prompt(`Your debt: ${debt}\nBankroll: ${bankroll}\nEnter amount to pay:`) || "0";
+      const pay = Math.max(0, Math.min(parseInt(amount), bankroll, debt));
+      bankroll -= pay;
+      debt -= pay;
+      saveState();
+      output.innerText = `You paid off ${pay}.\nRemaining debt: ${debt}\nBankroll: ${bankroll}\n`;
+      showMainMenu();
+    }
+
+    // ----- Blackjack Utilities -----
+    function newDeck() {
+      const suits = ['S','H','D','C'];
+      const ranks = [2,3,4,5,6,7,8,9,10,'J','Q','K','A'];
+      const deck = [];
+      for (let s of suits) for (let r of ranks) deck.push({rank: r, suit: s, code: r+s});
+      return deck;
+    }
+
+    function shuffle(deck) {
+      for (let i = deck.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random()*(i+1));
+        [deck[i], deck[j]] = [deck[j], deck[i]];
+      }
+    }
+
+    function draw(deck) { return deck.shift(); }
+
+    function handValue(hand) {
+      let total = 0, aces = 0;
+      for (let c of hand) {
+        if (typeof c.rank === 'number') total += c.rank;
+        else if (['J','Q','K'].includes(c.rank)) total += 10;
+        else { aces++; total += 11; }
+      }
+      while (total > 21 && aces > 0) { total -= 10; aces--; }
+      return total;
+    }
+
+    function showHand(who, hand, hideFirst=false) {
+      let display;
+      if (hideFirst) {
+        display = ["[hidden]", ...hand.slice(1).map(c=>c.code)].join(" ");
+        output.innerText += `${who}: ${display}\n`;
+      } else {
+        display = hand.map(c=>c.code).join(" ");
+        const value = handValue(hand);
+        output.innerText += `${who}: ${display}  --  (${value})\n`;
+      }
+    }
+
+    // ----- Blackjack Game State -----
+    let { bankroll, debt } = loadState();
+    let deck, playerHand, dealerHand, stake;
+    let playerDone = false;
+
+    function startRound() {
+      output.innerText = "";
+
+      stake = prompt(`Bankroll: ${bankroll}\nDebt: ${debt}\nPlace your bet (min 1):`);
+      if (stake === null) { showMainMenu(); return; } // back to menu
+
+      stake = Math.max(parseInt(stake) || 1, 1);
+
+      if (stake > bankroll) {
+        const extra = stake - bankroll;
+        debt += extra;
+        bankroll = 0;
+      } else {
+        bankroll -= stake;
+      }
+
+      saveState();
+
+      deck = newDeck();
+      shuffle(deck);
+      playerHand = [draw(deck), draw(deck)];
+      dealerHand = [draw(deck), draw(deck)];
+      playerDone = false;
+
+      output.innerText += "--- New Round ---\n";
+      showHand("Dealer", dealerHand, true);
+      showHand("Player", playerHand);
+
+      const pVal = handValue(playerHand);
+      const pBJ = playerHand.length === 2 && pVal === 21;
+
+      if (pBJ) {
+        showHand("Dealer", dealerHand);
+        const dVal = handValue(dealerHand);
+        const dBJ = dealerHand.length === 2 && dVal === 21;
+        if (dBJ) {
+          output.innerText += "Both have blackjack. Push (tie).\n";
+          bankroll += stake;
+        } else {
+          output.innerText += "Blackjack! You win 3:2 payout.\n";
+          bankroll += Math.floor(stake * 2.5);
+        }
+        saveState();
+        controls.innerHTML = `
+          <button onclick="startRound()">Next Round</button>
+          <button onclick="showMainMenu()">Return to Casino</button>
+        `;
+      } else {
+        showControls();
+      }
+    }
+
+    function playerHit() {
+      playerHand.push(draw(deck));
+      showHand("Player", playerHand);
+      if (handValue(playerHand) > 21) {
+        output.innerText += "Bust! You lose the stake.\n";
+        saveState();
+        controls.innerHTML = `
+          <button onclick="startRound()">Next Round</button>
+          <button onclick="showMainMenu()">Return to Casino</button>
+        `;
+      }
+    }
+
+    function playerStand() {
+      playerDone = true;
+      dealerTurn();
+    }
+
+    function dealerTurn() {
+      output.innerText += "\nDealer reveals...\n";
+      showHand("Dealer", dealerHand);
+
+      const dVal = handValue(dealerHand);
+      const dBJ = dealerHand.length === 2 && dVal === 21;
+      if (dBJ) {
+        output.innerText += "Dealer has blackjack. You lose.\n";
+        saveState();
+        controls.innerHTML = `
+          <button onclick="startRound()">Next Round</button>
+          <button onclick="showMainMenu()">Return to Casino</button>
+        `;
+        return;
+      }
+
+      while (handValue(dealerHand) <= 16) {
+        output.innerText += "Dealer hits.\n";
+        dealerHand.push(draw(deck));
+        showHand("Dealer", dealerHand);
+      }
+      if (handValue(dealerHand) > 21) output.innerText += "Dealer busts!\n";
+      resolveRound();
+    }
+
+    function resolveRound() {
+      const pVal = handValue(playerHand);
+      const dVal = handValue(dealerHand);
+      if (pVal > 21) {
+        // player busted
+      } else if (dVal > 21 || pVal > dVal) {
+        output.innerText += "You win!\n";
+        bankroll += stake * 2;
+      } else if (pVal < dVal) {
+        output.innerText += "You lose.\n";
+      } else {
+        output.innerText += "Push (tie).\n";
+        bankroll += stake;
+      }
+
+      saveState();
+      output.innerText += `\nBankroll: ${bankroll}\nDebt: ${debt}\n`;
+      controls.innerHTML = `
+        <button onclick="startRound()">Next Round</button>
+        <button onclick="showMainMenu()">Return to Casino</button>
+      `;
+    }
+
+    function showControls() {
+      controls.innerHTML = `
+        <button onclick="playerHit()">Hit</button>
+        <button onclick="playerStand()">Stand</button>
+        <button onclick="showMainMenu()">Quit Round</button>
+      `;
+    }
+
+    // ----- Start in Casino Menu -----
+    showMainMenu();
+  </script>
+</body>
+</html>
