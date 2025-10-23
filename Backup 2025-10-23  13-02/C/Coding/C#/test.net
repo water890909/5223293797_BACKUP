@@ -1,0 +1,3 @@
+// T.NET 9.0.9~x64~aspnetcore executable path: c:\Users\5223293797\AppData\Roaming\Code\User\globalStorage\ms-dotnettools.vscode-dotnet-runtime\.dotnet\9.0.9~x64~aspnetcore\dotnet.exe
+
+Console.WriteLine("Hello, World");
