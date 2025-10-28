@@ -1,5 +1,0 @@
-MODS:
-Sicko Mode (plays SKELETONS)
-
-SOUNDS:
-breath sound on miss
